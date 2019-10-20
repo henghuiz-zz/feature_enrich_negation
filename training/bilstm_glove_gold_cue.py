@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 import time
+import pickle
 import pandas as pd
 from sklearn.metrics import f1_score
 
@@ -9,16 +10,15 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('save_model_dir',
-                    'ckpt/elmo_gold_cue/speculation_biology_abstract/bilstm_char/cv0/',
+                    'ckpt/glove_gold_cue/speculation_biology_abstract/bilstm_char/cv0/',
                     'path to the directory for saving the model')
 flags.DEFINE_string('eval_model_dir',
-                    'ckpt/elmo_gold_cue/speculation_biology_abstract/bilstm_char/',
+                    'ckpt/glove_gold_cue/speculation_biology_abstract/bilstm_char/',
                     'path to the directory for evaluation')
 flags.DEFINE_string('training_data_path',
-                    'data/tfrecords_elmo/gold_cue/speculation_biology_abstract/',
-                    'path for the training tfrecords for training')
+                    'data/tfrecords_glove/gold_cue/speculation_biology_abstract/',
+                    'path for the training tfrecords_elmo for training')
 
-flags.DEFINE_bool('use_elmo', True, 'to use full elmo model or just its word embeddings')
 flags.DEFINE_bool('use_pos', False, 'to use pos features or not')
 flags.DEFINE_bool('use_dep', False, 'to use dep features or not')
 flags.DEFINE_bool('use_path', False, 'to use path features or not')
@@ -38,7 +38,7 @@ flags.DEFINE_integer('seed', 0, 'which random seed to use')
 flags.DEFINE_bool('training', True, 'training or testing model')
 
 
-def bidirectional_rnn_func(x, l, train=True, return_last=False):
+def bidirectional_rnn_func(x, l, train=True):
   max_len = tf.shape(x)[1]
   m_d = tf.sequence_mask(l, max_len, dtype=tf.float32)
   m_d = tf.expand_dims(m_d, -1)
@@ -56,25 +56,15 @@ def bidirectional_rnn_func(x, l, train=True, return_last=False):
   if train:
     x = tf.layers.dropout(x, rate=0.2)
 
-  rnn_state, rnn_output = all_fw_cells(x)
+  rnn_state, _ = all_fw_cells(x)
 
-  if return_last:
-    if rnn_type.lower() == 'lstm':
-      output = tf.concat([item[-1].h for item in rnn_output], axis=-1)
-    elif rnn_type.lower() == 'gru':
-      output = tf.concat(
-        [rnn_output[0][FLAGS.depth - 1, :, :],
-         rnn_output[0][2 * FLAGS.depth - 1, :, :]
-         ], axis=-1)
-
-  else:
-    rnn_state = tf.transpose(rnn_state, [1, 0, 2])
-    output = tf.concat(rnn_state, axis=-1) * m_d
+  rnn_state = tf.transpose(rnn_state, [1, 0, 2])
+  output = tf.concat(rnn_state, axis=-1) * m_d
 
   return output
 
 
-def annotation_func_train(x, y, l, pos, dep, path, lpath, cp, token_id, cue, train, reuse, scope='vanilla_rnn'):
+def annotation_func_train(x, y, l, pos, dep, path, lpath, cp, cue, token_id, train, reuse, scope='vanilla_rnn'):
   with tf.variable_scope(scope, reuse=reuse):
     seq_len = tf.shape(x)[1]
     l = tf.cast(l, tf.int32)
@@ -83,14 +73,7 @@ def annotation_func_train(x, y, l, pos, dep, path, lpath, cp, token_id, cue, tra
     mask = tf.stop_gradient(mask)
     # project to some low dimension
 
-    if FLAGS.use_elmo:
-      weight = tf.get_variable('weight', [3, 1], tf.float32, tf.constant_initializer(1))
-      n_weight = tf.nn.softmax(weight, axis=0)
-      gamma = tf.get_variable('gamma', [], tf.float32, tf.constant_initializer(1))
-      token_embedding = tf.tensordot(x, n_weight, [[-1], [0]])
-      token_embedding = gamma * tf.squeeze(token_embedding, axis=-1)
-    else:
-      token_embedding = x[:, :, :512, 0]
+    token_embedding = x
 
     gc = tf.one_hot(cue, depth=2)
 
@@ -149,7 +132,7 @@ def _parse_function(example_proto):
       "length": tf.FixedLenFeature([], dtype=tf.int64),
     },
     sequence_features={
-      "token": tf.FixedLenSequenceFeature([1024 * 3], dtype=tf.float32),
+      "token": tf.FixedLenSequenceFeature([301], dtype=tf.float32),
       "span": tf.FixedLenSequenceFeature([], dtype=tf.int64),
       "cue": tf.FixedLenSequenceFeature([], dtype=tf.int64),
       "pos": tf.FixedLenSequenceFeature([], dtype=tf.int64),
@@ -161,7 +144,7 @@ def _parse_function(example_proto):
     }
   )
 
-  token = tf.reshape(features["token"], (-1, 1024, 3))
+  token = features["token"]
 
   return token, features["span"], contexts["length"], \
          features["pos"], features["dep"], features["path"], \
@@ -175,22 +158,19 @@ def generate_iterator_ops(filenames, train=True, reuse=False):
   if train:
     dataset = dataset.shuffle(buffer_size=2 * FLAGS.batch_size)
 
-  dataset = dataset.padded_batch(
-    FLAGS.batch_size, ([tf.Dimension(None), tf.Dimension(1024), tf.Dimension(3)],
-                       [tf.Dimension(None)],
-                       [],
-                       [tf.Dimension(None)],
-                       [tf.Dimension(None)],
-                       [tf.Dimension(None)],
-                       [tf.Dimension(None)],
-                       [tf.Dimension(None)],
-                       [tf.Dimension(None)],
-                       [tf.Dimension(None)]))
+  dataset = dataset.padded_batch(FLAGS.batch_size, ([tf.Dimension(None), tf.Dimension(301)],
+                                                    [tf.Dimension(None)],
+                                                    [],
+                                                    [tf.Dimension(None)],
+                                                    [tf.Dimension(None)],
+                                                    [tf.Dimension(None)],
+                                                    [tf.Dimension(None)],
+                                                    [tf.Dimension(None)],
+                                                    [tf.Dimension(None)],
+                                                    [tf.Dimension(None)]))
   data_iterator = dataset.make_initializable_iterator()
   # grab a batch of data
-  next_x, next_y, next_l, next_pos, next_dep, next_path, \
-  next_lp, next_cp, next_id, next_c = data_iterator.get_next()
-  # next_x, next_y, next_l = data_iterator.get_next()
+  next_x, next_y, next_l, next_pos, next_dep, next_path, next_lp, next_cp, next_id, next_c = data_iterator.get_next()
 
   ops = annotation_func_train(next_x, next_y, next_l, next_pos, next_dep, next_path, next_lp,
                               next_cp, next_id, next_c, train=train, reuse=reuse)
@@ -260,17 +240,13 @@ def train():
   all_files = os.listdir(FLAGS.training_data_path)
   all_files = [item for item in all_files if item[-3:] == 'tfr']
 
-  train_files = [FLAGS.training_data_path + item
-                 for item in all_files if item[8] != str(FLAGS.cv)]
-  valid_fils = [FLAGS.training_data_path + item
-                for item in all_files if item[8] == str(FLAGS.cv)]
+  train_files = [FLAGS.training_data_path + item for item in all_files if item[8] != str(FLAGS.cv)]
+  valid_files = [FLAGS.training_data_path + item for item in all_files if item[8] == str(FLAGS.cv)]
 
   with tf.Graph().as_default():
     tf.set_random_seed(FLAGS.seed)
-    train_iter, train_op = generate_iterator_ops(
-      train_files, train=True, reuse=False)
-    valid_iter, valid_op = generate_iterator_ops(
-      valid_fils, train=False, reuse=True)
+    train_iter, train_op = generate_iterator_ops(train_files, train=True, reuse=False)
+    valid_iter, valid_op = generate_iterator_ops(valid_files, train=False, reuse=True)
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
@@ -292,10 +268,8 @@ def train():
       sess.run(tf.global_variables_initializer())
       for epoch in range(FLAGS.num_epochs):
         tic = time.time()
-        train_loss, train_f1, train_pcs = \
-          run_one_epoch_train(sess, train_iter, train_op)
-        valid_loss, valid_f1, valid_pcs = \
-          run_one_epoch_train(sess, valid_iter, valid_op)
+        train_loss, train_f1, train_pcs = run_one_epoch_train(sess, train_iter, train_op)
+        valid_loss, valid_f1, valid_pcs = run_one_epoch_train(sess, valid_iter, valid_op)
         toc = time.time() - tic
 
         print(
@@ -317,14 +291,13 @@ def train():
 
 def evaluation():
   all_files = os.listdir(FLAGS.training_data_path)
-
-  load_path = '../ckpt/neg_only/bilstm_elmo_af/cv'
+  load_path = FLAGS.eval_model_dir
 
   for cv in range(10):
-    valid_fils = [FLAGS.training_data_path + item for item in all_files if item[4] == str(cv)]
+    valid_files = [FLAGS.training_data_path + item for item in all_files if item[4] == str(cv)]
 
     with tf.Graph().as_default():
-      valid_iter, valid_op = generate_iterator_ops(valid_fils, train=False, reuse=False)
+      valid_iter, valid_op = generate_iterator_ops(valid_files, train=False, reuse=False)
 
       config = tf.ConfigProto()
       config.gpu_options.allow_growth = True

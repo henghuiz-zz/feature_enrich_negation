@@ -38,7 +38,7 @@ flags.DEFINE_integer('seed', 0, 'which random seed to use')
 flags.DEFINE_bool('training', True, 'training or testing model')
 
 
-def bidirectional_rnn_func(x, l, train=True, return_last=False):
+def bidirectional_rnn_func(x, l, train=True):
   max_len = tf.shape(x)[1]
   m_d = tf.sequence_mask(l, max_len, dtype=tf.float32)
   m_d = tf.expand_dims(m_d, -1)
@@ -56,20 +56,10 @@ def bidirectional_rnn_func(x, l, train=True, return_last=False):
   if train:
     x = tf.layers.dropout(x, rate=0.2)
 
-  rnn_state, rnn_output = all_fw_cells(x)
+  rnn_state, _ = all_fw_cells(x)
 
-  if return_last:
-    if rnn_type.lower() == 'lstm':
-      output = tf.concat([item[-1].h for item in rnn_output], axis=-1)
-    elif rnn_type.lower() == 'gru':
-      output = tf.concat(
-        [rnn_output[0][FLAGS.depth - 1, :, :],
-         rnn_output[0][2 * FLAGS.depth - 1, :, :]
-         ], axis=-1)
-
-  else:
-    rnn_state = tf.transpose(rnn_state, [1, 0, 2])
-    output = tf.concat(rnn_state, axis=-1) * m_d
+  rnn_state = tf.transpose(rnn_state, [1, 0, 2])
+  output = tf.concat(rnn_state, axis=-1) * m_d
 
   return output
 

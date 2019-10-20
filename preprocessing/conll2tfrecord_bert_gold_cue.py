@@ -10,10 +10,11 @@ from bert.tokenization import FullTokenizer
 DATA_PATH = 'data/'
 DATASET_NAME = 'biology_abstract' # clinical_reports or biology_abstract
 TASK = 'speculation' # speculation or negation
+PRETRAIN_MODEL_PATH = '/home/henghuiz/HugeData/word_vector/bert/'
 
 class BERTModel:
   def __init__(self, model_name='uncased_L-24_H-1024_A-16'):
-    bert_pretrained_dir = '/home/henghuiz/HugeData/word_vector/bert/' + model_name
+    bert_pretrained_dir = PRETRAIN_MODEL_PATH + model_name
     self.model_name = model_name
     self.do_lower_case = model_name.startswith('uncased')
     self.vocab_file = os.path.join(bert_pretrained_dir, 'vocab.txt')
