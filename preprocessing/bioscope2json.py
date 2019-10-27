@@ -2,9 +2,12 @@ import bs4
 import json
 import html
 import os
+import argparse
 from bs4 import BeautifulSoup
 
-DATA_PATH = 'data/'
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--data_path', type=str, default='data/', help='path for the data folder')
+args = parser.parse_args()
 
 
 def get_span_and_tag(sentence, previous_tag=None):
@@ -58,7 +61,7 @@ def return_span(all_span_tag):
 
 
 def parse_clinical():
-  clinical_xml = open(DATA_PATH + 'raw/clinical_modified.xml', 'r', encoding='UTF-8').read()
+  clinical_xml = open(args.data_path + 'raw/clinical_modified.xml', 'r', encoding='UTF-8').read()
   soup = BeautifulSoup(clinical_xml, "lxml")
 
   all_record = soup.find_all(type="Medical_record")
@@ -79,11 +82,11 @@ def parse_clinical():
 
     all_record_json[record_id] = record_obj
 
-  json.dump(all_record_json, open(DATA_PATH + 'json/clinical_reports.json', 'w', encoding='UTF-8'), indent=True)
+  json.dump(all_record_json, open(args.data_path + 'json/clinical_reports.json', 'w', encoding='UTF-8'), indent=True)
 
 
 def parse_bio():
-  clinical_xml = open(DATA_PATH + 'raw/abstracts_pmid_modified.xml', 'r', encoding='UTF-8').read()
+  clinical_xml = open(args.data_path + 'raw/abstracts_pmid_modified.xml', 'r', encoding='UTF-8').read()
   soup = BeautifulSoup(clinical_xml, "lxml")
 
   all_record = soup.find_all(type="Biological_abstract")
@@ -104,11 +107,11 @@ def parse_bio():
 
     all_record_json[record_id] = record_obj
 
-  json.dump(all_record_json, open(DATA_PATH + 'json/biology_abstract.json', 'w', encoding='UTF-8'), indent=True)
+  json.dump(all_record_json, open(args.data_path + 'json/biology_abstract.json', 'w', encoding='UTF-8'), indent=True)
 
 
 if __name__ == '__main__':
-  if not os.path.isdir(DATA_PATH + 'json/'):
-    os.makedirs(DATA_PATH + 'json/')
+  if not os.path.isdir(args.data_path + 'json/'):
+    os.makedirs(args.data_path + 'json/')
   parse_clinical()
   parse_bio()

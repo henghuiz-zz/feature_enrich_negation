@@ -3,14 +3,34 @@ import tensorflow as tf
 from bert.tokenization import FullTokenizer
 from collections import Counter
 import json
+import argparse
 
-DATA_PATH = 'data/'
-DATASET_NAME = 'biology_abstract' # clinical_reports or biology_abstract
-TASK = 'speculation' # speculation or negation
-PRETRAIN_MODEL_PATH = '/home/henghuiz/HugeData/word_vector/bert/'
-MODEL_NAME = 'uncased_L-24_H-1024_A-16'
-DO_LOWER_CASE = MODEL_NAME.startswith('uncased')
-VOCAB_FILE = os.path.join(PRETRAIN_MODEL_PATH, MODEL_NAME, 'vocab.txt')
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--data_path',
+                    type=str,
+                    default='data/',
+                    help='path for the data folder')
+parser.add_argument('--dataset_name',
+                    type=str,
+                    default='biology_abstract',
+                    help='clinical_reports or biology_abstract')
+parser.add_argument('--task',
+                    type=str,
+                    default='speculation',
+                    help='speculation or negation')
+parser.add_argument('--pretrain_models_path',
+                    type=str,
+                    default='/home/henghuiz/word_vector/bert/',
+                    help='place you put your pretrained bert model')
+parser.add_argument('--bert_model_name',
+                    type=str,
+                    default='uncased_L-24_H-1024_A-16',
+                    help='name of the pretrained BERT model')
+args = parser.parse_args()
+
+DO_LOWER_CASE = args.bert_model_name.startswith('uncased')
+VOCAB_FILE = os.path.join(args.pretrain_models_path, args.bert_model_name,
+                          'vocab.txt')
 
 
 def mapping(cata_dict, key):
@@ -28,8 +48,7 @@ def parse_text(text):
   all_path = Counter()
   all_vocab = Counter()
 
-  tokenizer = FullTokenizer(vocab_file=VOCAB_FILE,
-                            do_lower_case=DO_LOWER_CASE)
+  tokenizer = FullTokenizer(vocab_file=VOCAB_FILE, do_lower_case=DO_LOWER_CASE)
 
   for sentence in sentences:
     token_sequence = []
@@ -39,7 +58,8 @@ def parse_text(text):
         token = token.split('\t')
         token_sequence.append(token)
 
-    subwords = sum([tokenizer.tokenize(item[0]) for item in token_sequence], [])
+    subwords = sum([tokenizer.tokenize(item[0]) for item in token_sequence],
+                   [])
     all_vocab.update(subwords)
     all_pos.update([item[2] for item in token_sequence])
     all_dep.update([item[3] for item in token_sequence])
@@ -48,7 +68,12 @@ def parse_text(text):
   return all_pos, all_dep, all_path, all_vocab
 
 
-def build_dataset(conll_file, tfrecod_file, pos2id, dep2id, path2id, truncate=False):
+def build_dataset(conll_file,
+                  tfrecod_file,
+                  pos2id,
+                  dep2id,
+                  path2id,
+                  truncate=False):
   max_len = 0
 
   tokenizer = FullTokenizer(vocab_file=VOCAB_FILE, do_lower_case=DO_LOWER_CASE)
@@ -118,50 +143,82 @@ def build_dataset(conll_file, tfrecod_file, pos2id, dep2id, path2id, truncate=Fa
     lpath_list.append(-1)
     cp_list.append(-1)
 
-    assert len(subword_list) == len(span_list) == len(mask_list) == len(subword_id_list)
+    assert len(subword_list) == len(span_list) == len(mask_list) == len(
+        subword_id_list)
 
     max_len = max(max_len, len(subword_id_list))
 
     if len(subword_list) > 2:
       if (not truncate) or (len(subword_id_list) <= 64):
         # write tfrecord
-        token_id = [tf.train.Feature(int64_list=tf.train.Int64List(value=[t_])) for t_ in subword_id_list]
-        mask = [tf.train.Feature(int64_list=tf.train.Int64List(value=[m_])) for m_ in mask_list]
-        span = [tf.train.Feature(int64_list=tf.train.Int64List(value=[s_])) for s_ in span_list]
-        cue = [tf.train.Feature(int64_list=tf.train.Int64List(value=[c_])) for c_ in cue_list]
+        token_id = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[t_]))
+            for t_ in subword_id_list
+        ]
+        mask = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[m_]))
+            for m_ in mask_list
+        ]
+        span = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[s_]))
+            for s_ in span_list
+        ]
+        cue = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[c_]))
+            for c_ in cue_list
+        ]
 
-        pos_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[pos_])) for pos_ in pos_list]
-        dep_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[dep_])) for dep_ in dep_list]
-        path_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[path_])) for path_ in path_list]
-        lpath_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[lpath_])) for lpath_ in lpath_list]
-        cp_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[cp_])) for cp_ in cp_list]
+        pos_features = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[pos_]))
+            for pos_ in pos_list
+        ]
+        dep_features = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[dep_]))
+            for dep_ in dep_list
+        ]
+        path_features = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[path_]))
+            for path_ in path_list
+        ]
+        lpath_features = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[lpath_]))
+            for lpath_ in lpath_list
+        ]
+        cp_features = [
+            tf.train.Feature(int64_list=tf.train.Int64List(value=[cp_]))
+            for cp_ in cp_list
+        ]
 
         feature_list = {
-          'token_id': tf.train.FeatureList(feature=token_id),
-          'span': tf.train.FeatureList(feature=span),
-          'masks': tf.train.FeatureList(feature=mask),
-          'cue': tf.train.FeatureList(feature=cue),
-          'pos': tf.train.FeatureList(feature=pos_features),
-          'dep': tf.train.FeatureList(feature=dep_features),
-          'path': tf.train.FeatureList(feature=path_features),
-          'lpath': tf.train.FeatureList(feature=lpath_features),
-          'cp': tf.train.FeatureList(feature=cp_features),
+            'token_id': tf.train.FeatureList(feature=token_id),
+            'span': tf.train.FeatureList(feature=span),
+            'masks': tf.train.FeatureList(feature=mask),
+            'cue': tf.train.FeatureList(feature=cue),
+            'pos': tf.train.FeatureList(feature=pos_features),
+            'dep': tf.train.FeatureList(feature=dep_features),
+            'path': tf.train.FeatureList(feature=path_features),
+            'lpath': tf.train.FeatureList(feature=lpath_features),
+            'cp': tf.train.FeatureList(feature=cp_features),
         }
 
-        context = tf.train.Features(feature={
-          "length": tf.train.Feature(int64_list=tf.train.Int64List(value=[len(subword_id_list)])),
-        })
+        context = tf.train.Features(
+            feature={
+                "length":
+                tf.train.Feature(int64_list=tf.train.Int64List(
+                    value=[len(subword_id_list)])),
+            })
 
         feature_lists = tf.train.FeatureLists(feature_list=feature_list)
-        ex = tf.train.SequenceExample(feature_lists=feature_lists, context=context)
+        ex = tf.train.SequenceExample(feature_lists=feature_lists,
+                                      context=context)
         tf_writer.write(ex.SerializeToString())
 
   tf_writer.close()
 
 
 def main():
-  data_path = DATA_PATH + 'conll/gold_cue/'+TASK+'_'+DATASET_NAME+'/'
-  output_path = DATA_PATH + 'tfrecords_bert_ft/gold_cue/'+TASK+'_'+DATASET_NAME+'/'
+  data_path = args.data_path + 'conll/gold_cue/' + args.task + '_' + args.dataset_name + '/'
+  output_path = args.data_path + 'tfrecords_bert_ft/gold_cue/' + args.task + '_' + args.dataset_name + '/'
 
   if not os.path.isdir(output_path):
     os.makedirs(output_path)
@@ -189,16 +246,24 @@ def main():
   dep2id = {item: key + 1 for key, item in enumerate(all_dep)}
   path2id = {item: key + 1 for key, item in enumerate(all_path)}
 
-  json.dump({'pos': pos2id, 'dep': dep2id, 'path': path2id}, open(output_path + '/meta.json', 'w'), indent=True)
+  json.dump({
+      'pos': pos2id,
+      'dep': dep2id,
+      'path': path2id
+  },
+            open(output_path + '/meta.json', 'w'),
+            indent=True)
 
   for file in filenames:
-    build_dataset(data_path + file,
-                  output_path + file[:-6] + '_long.tfr',
+    build_dataset(data_path + file, output_path + file[:-6] + '_long.tfr',
                   pos2id, dep2id, path2id)
 
     build_dataset(data_path + file,
                   output_path + file[:-6] + '_short.tfr',
-                  pos2id, dep2id, path2id, truncate=True)
+                  pos2id,
+                  dep2id,
+                  path2id,
+                  truncate=True)
 
 
 if __name__ == '__main__':

@@ -4,17 +4,33 @@ import numpy as np
 import tensorflow as tf
 from collections import Counter
 import json
+import argparse
 
-DATA_PATH = 'data/'
-DATASET_NAME = 'biology_abstract' # clinical_reports or biology_abstract
-TASK = 'speculation' # speculation or negation
-
-GLOVE_PATH = '/home/henghuiz/HugeData/word_vector/glove.840B.300d.vec'
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--data_path',
+                    type=str,
+                    default='data/',
+                    help='path for the data folder')
+parser.add_argument('--dataset_name',
+                    type=str,
+                    default='biology_abstract',
+                    help='clinical_reports or biology_abstract')
+parser.add_argument('--task',
+                    type=str,
+                    default='speculation',
+                    help='speculation or negation')
+parser.add_argument(
+    '--glove_path',
+    type=str,
+    default='/home/henghuiz/word_vector/glove.840B.300d.vec',
+    help='path to glove embedding file')
+args = parser.parse_args()
 
 
 class Glove:
   def __init__(self):
-    self.w2v_model = gensim.models.KeyedVectors.load_word2vec_format(GLOVE_PATH)
+    self.w2v_model = gensim.models.KeyedVectors.load_word2vec_format(
+        args.glove_path)
 
   def get_word_embedding(self, token):
     word_emb = np.zeros(301)
@@ -65,7 +81,8 @@ def parse_text(text):
   return all_pos, all_dep, all_path, all_lpath, all_cp, max_length, all_vocab
 
 
-def write_tf_records(text, output_filename, glove, pos2id, sem2id, root2id, token2id):
+def write_tf_records(text, output_filename, glove, pos2id, sem2id, root2id,
+                     token2id):
   writer = tf.python_io.TFRecordWriter(output_filename)
   sentences = text.split('\n\n')
   for sent_id, sentence in enumerate(sentences):
@@ -100,40 +117,66 @@ def write_tf_records(text, output_filename, glove, pos2id, sem2id, root2id, toke
         "length": tf.train.Feature(int64_list=tf.train.Int64List(value=[l])),
       })
 
-      token_features = [tf.train.Feature(float_list=tf.train.FloatList(value=embedding.reshape(-1))) for embedding
-                        in
-                        embeddings]
-      cue_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[cue])) for cue in cues]
-      pos_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[pos_])) for pos_ in pos]
-      dep_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[dep_])) for dep_ in dep]
-      path_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[path_])) for path_ in path]
-      lpath_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[lpath_])) for lpath_ in lpath]
-      cp_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[cp_])) for cp_ in cp]
-      span_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[span_])) for span_ in span]
-      token_id_features = [tf.train.Feature(int64_list=tf.train.Int64List(value=[id_])) for id_ in token_ids]
+      token_features = [
+          tf.train.Feature(float_list=tf.train.FloatList(
+              value=embedding.reshape(-1))) for embedding in embeddings
+      ]
+      cue_features = [
+          tf.train.Feature(int64_list=tf.train.Int64List(value=[cue]))
+          for cue in cues
+      ]
+      pos_features = [
+          tf.train.Feature(int64_list=tf.train.Int64List(value=[pos_]))
+          for pos_ in pos
+      ]
+      dep_features = [
+          tf.train.Feature(int64_list=tf.train.Int64List(value=[dep_]))
+          for dep_ in dep
+      ]
+      path_features = [
+          tf.train.Feature(int64_list=tf.train.Int64List(value=[path_]))
+          for path_ in path
+      ]
+      lpath_features = [
+          tf.train.Feature(int64_list=tf.train.Int64List(value=[lpath_]))
+          for lpath_ in lpath
+      ]
+      cp_features = [
+          tf.train.Feature(int64_list=tf.train.Int64List(value=[cp_]))
+          for cp_ in cp
+      ]
+      span_features = [
+          tf.train.Feature(int64_list=tf.train.Int64List(value=[span_]))
+          for span_ in span
+      ]
+      token_id_features = [
+          tf.train.Feature(int64_list=tf.train.Int64List(value=[id_]))
+          for id_ in token_ids
+      ]
 
       feature_list = {
-        'token': tf.train.FeatureList(feature=token_features),
-        'token_id': tf.train.FeatureList(feature=token_id_features),
-        'cue': tf.train.FeatureList(feature=cue_features),
-        'pos': tf.train.FeatureList(feature=pos_features),
-        'dep': tf.train.FeatureList(feature=dep_features),
-        'path': tf.train.FeatureList(feature=path_features),
-        'lpath': tf.train.FeatureList(feature=lpath_features),
-        'cp': tf.train.FeatureList(feature=cp_features),
-        'span': tf.train.FeatureList(feature=span_features),
+          'token': tf.train.FeatureList(feature=token_features),
+          'token_id': tf.train.FeatureList(feature=token_id_features),
+          'cue': tf.train.FeatureList(feature=cue_features),
+          'pos': tf.train.FeatureList(feature=pos_features),
+          'dep': tf.train.FeatureList(feature=dep_features),
+          'path': tf.train.FeatureList(feature=path_features),
+          'lpath': tf.train.FeatureList(feature=lpath_features),
+          'cp': tf.train.FeatureList(feature=cp_features),
+          'span': tf.train.FeatureList(feature=span_features),
       }
 
       feature_lists = tf.train.FeatureLists(feature_list=feature_list)
-      ex = tf.train.SequenceExample(feature_lists=feature_lists, context=context)
+      ex = tf.train.SequenceExample(feature_lists=feature_lists,
+                                    context=context)
       writer.write(ex.SerializeToString())
 
   writer.close()
 
 
 def main():
-  data_path = DATA_PATH + 'conll/gold_cue/'+TASK+'_'+DATASET_NAME+'/'
-  output_path = DATA_PATH + 'tfrecords_glove/gold_cue/'+TASK+'_'+DATASET_NAME+'/'
+  data_path = args.data_path + 'conll/gold_cue/' + args.task + '_' + args.dataset_name + '/'
+  output_path = args.data_path + 'tfrecords_glove/gold_cue/' + args.task + '_' + args.dataset_name + '/'
 
   if not os.path.isdir(output_path):
     os.makedirs(output_path)
@@ -163,7 +206,10 @@ def main():
 
   all_vocab = all_vocab.most_common(len(all_vocab))
   valid_vocabulary = [item[0] for item in all_vocab if item[1] >= 5]
-  token2id = {token: token_id + 1 for token_id, token in enumerate(valid_vocabulary)}
+  token2id = {
+      token: token_id + 1
+      for token_id, token in enumerate(valid_vocabulary)
+  }
 
   all_pos = [item[0] for item in all_pos.most_common(len(all_pos))]
   all_dep = [item[0] for item in all_dep.most_common(len(all_dep))]
@@ -177,7 +223,13 @@ def main():
 
   glove = Glove()
 
-  json.dump({'pos':pos2id, 'dep': dep2id, 'path': path2id}, open(output_path + '/meta.json', 'w'), indent=True)
+  json.dump({
+      'pos': pos2id,
+      'dep': dep2id,
+      'path': path2id
+  },
+            open(output_path + '/meta.json', 'w'),
+            indent=True)
 
   for filename in filenames:
     full_path = data_path + filename
@@ -185,7 +237,8 @@ def main():
 
     output_file = output_path + filename[:-5] + 'tfr'
     print(output_file)
-    write_tf_records(text, output_file, glove, pos2id, dep2id, path2id, token2id)
+    write_tf_records(text, output_file, glove, pos2id, dep2id, path2id,
+                     token2id)
 
 
 if __name__ == '__main__':

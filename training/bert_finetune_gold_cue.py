@@ -33,7 +33,7 @@ flags.DEFINE_bool('training', True, 'training or testing model')
 
 
 MODEL_NAME = 'uncased_L-24_H-1024_A-16'
-PRETRAIN_MODEL_PATH = '/home/henghuiz/HugeData/word_vector/bert/' + MODEL_NAME
+PRETRAIN_MODEL_PATH = '/home/henghuiz/word_vector/bert/' + MODEL_NAME
 CONFIG_FILE = os.path.join(PRETRAIN_MODEL_PATH, 'bert_config.json')
 
 train_tokens = int(1200 * 9 / FLAGS.batch_size)
